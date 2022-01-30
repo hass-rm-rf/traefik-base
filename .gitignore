@@ -1,0 +1,5 @@
+.env
+certs/*
+traefik/*
+!traefik/.gitkeep
+!traefik/configs/.gitkeep

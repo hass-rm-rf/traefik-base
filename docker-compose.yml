@@ -1,0 +1,89 @@
+version: "3.5"
+
+services:
+  # FOR DYNDNS
+  cloudflare-ddns:
+    restart: always
+    image: oznu/cloudflare-ddns:latest
+    environment:
+      API_KEY: ${CF_DNS_API_TOKEN}
+      ZONE: ${MAIN_DOMAIN}
+      CRON: '*/10 * * * *'
+    volumes:
+      - "/etc/localtime:/etc/localtime:ro"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # TEMPLATING
+  traefik-config-template:
+    image: dinutac/jinja2docker:latest
+    entrypoint: sh -c '
+      cd /tpl && 
+      touch /out/passwd && 
+      touch /out/acme.json && 
+      chmod 600 /out/acme.json && 
+      find . -type f -name "*.yml" -exec jinja2 {} -o /out/{} \;'
+    volumes:
+      - "${PWD}/traefik-tpl:/tpl:ro"
+      - "${PWD}/traefik:/out"
+    env_file:
+      - .env
+
+  traefik:
+    restart: always
+    image: traefik:2.6
+    depends_on: ["traefik-config-template"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.entrypoints=https"
+      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api.rule=Host(`traefik.${MAIN_DOMAIN}`)"
+      - "traefik.http.routers.api.middlewares=basic-auth@file"
+      - "com.centurylinklabs.watchtower.enable=true"
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    env_file:
+      - .env
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "${PWD}/traefik:/etc/traefik"
+      - "/etc/localtime:/etc/localtime:ro"
+
+  traefik-certs-dumper:
+    restart: always
+    image: ldez/traefik-certs-dumper:v2.7.4
+    entrypoint: sh -c '
+      apk add jq
+      ; while ! [ -e /data/acme.json ]
+      || ! [ `jq ".[] | .Certificates | length" /data/acme.json` != 0 ]; do
+      sleep 1
+      ; done
+      && traefik-certs-dumper file --version v2 --watch
+        --source /data/acme.json --dest /certs
+        --crt-ext=.pem --key-ext=.pem
+        --domain-subdir=true'
+    volumes:
+      - "${PWD}/certs:/certs"
+      - "${PWD}/traefik:/data:ro"
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json
+      - "/etc/localtime:/etc/localtime:ro"
+    environment:
+      WATCHTOWER_CLEANUP: 'true'
+      WATCHTOWER_INCLUDE_RESTARTING: 'true'
+      WATCHTOWER_LABEL_ENABLE: 'true'
+      WATCHTOWER_SCHEDULE: '0 0 */4 * * *'
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - default
+
+networks:
+  default:
+    name: base

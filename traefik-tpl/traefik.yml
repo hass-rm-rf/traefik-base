@@ -1,0 +1,45 @@
+#log:
+#  level: DEBUG
+
+api:
+  dashboard: true
+  debug: true
+  insecure: true
+
+entryPoints:
+  http:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: https
+          scheme: https
+          permanent: true
+  https:
+    address: ":443"
+    http:
+      tls:
+        certResolver: acme
+        domains:
+          - main: '{{ environ('MAIN_DOMAIN') }}'
+            sans: '*.{{ environ('MAIN_DOMAIN') }}'
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+  file:
+    directory: /etc/traefik/configs
+    watch: true
+
+certificatesResolvers:
+  acme:
+    acme:
+      email: {{ environ('EMAIL') }}
+      storage: /etc/traefik/acme.json
+      dnsChallenge:
+        provider: cloudflare
+        delayBeforeCheck: 0
+        resolvers:
+          - "1.1.1.1:53"
+          - "1.0.0.1:53"

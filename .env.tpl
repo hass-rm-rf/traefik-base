@@ -1,0 +1,4 @@
+CF_DNS_API_TOKEN=
+MAIN_DOMAIN=
+HA_URI=http://123.123.123.123:8123/
+EMAIL=awesome@mail.null

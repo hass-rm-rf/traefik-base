@@ -1,0 +1,12 @@
+http:
+  routers:
+    ha:
+      entryPoints:
+        - https
+      service: ha
+      rule: "Host(`ha.{{ environ("MAIN_DOMAIN") }}`)"
+  services:
+    ha:
+      loadBalancer:
+        servers:
+          - url: "{{ environ("HA_URI") }}"
